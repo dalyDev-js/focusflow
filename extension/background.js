@@ -2,6 +2,17 @@ import { PHASES, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs } from './sh
 
 const END_ALARM = 'phase-end';
 const TICK_ALARM = 'badge-tick';
+const NOTIFICATION_ID = 'focusflow-phase';
+
+// Every state change runs through this queue. Without it, the end alarm and the
+// badge tick could both see an expired timer at the same moment and advance twice
+// (two notifications, double-counted stats, a skipped phase).
+let queue = Promise.resolve();
+function serial(fn) {
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => {});
+  return run;
+}
 
 // ---------- storage helpers ----------
 async function load() {
@@ -83,10 +94,32 @@ async function setPhase(phase) {
   await saveState(state);
 }
 
+// Manually edit the time from the popup. Idle: changes that phase's default length.
+// Running or paused: changes only the time left in the current session.
+async function setMinutes(minutes) {
+  const ms = Math.round(Math.min(180, Math.max(0.0167, Number(minutes))) * 60000);
+  if (!Number.isFinite(ms)) return;
+  const { state, settings } = await load();
+  if (state.status === 'idle') {
+    settings[state.phase] = Math.round((ms / 60000) * 100) / 100;
+    await chrome.storage.local.set({ settings });
+    await saveState(state);
+    return;
+  }
+  if (state.status === 'running') {
+    state.endTime = Date.now() + ms;
+    await chrome.alarms.create(END_ALARM, { when: state.endTime });
+  } else {
+    state.remainingMs = ms;
+  }
+  await saveState(state);
+}
+
 // Moves to the next phase. `completed` is true when the timer actually ran out
 // (counts toward stats), false when the user skipped.
 async function advance(completed) {
   const { state, settings, stats } = await load();
+  if (completed && !(state.status === 'running' && state.endTime <= Date.now() + 1000)) return;
   const finished = state.phase;
 
   if (finished === 'focus') {
@@ -145,7 +178,8 @@ async function notify(finished, next, settings) {
     long: { title: 'Long break is over 🌿', message: `Recharged? Let's start a fresh ${settings.focus} minute focus round.` },
   };
   const m = messages[finished];
-  await chrome.notifications.create(`ff-${Date.now()}`, {
+  await chrome.notifications.clear(NOTIFICATION_ID);
+  await chrome.notifications.create(NOTIFICATION_ID, {
     type: 'basic',
     iconUrl: 'icons/icon128.png',
     title: m.title,
@@ -158,7 +192,7 @@ async function notify(finished, next, settings) {
 
 chrome.notifications.onButtonClicked.addListener(async (id, index) => {
   chrome.notifications.clear(id);
-  if (index === 0) await start();
+  if (index === 0) await serial(start);
 });
 
 chrome.notifications.onClicked.addListener((id) => chrome.notifications.clear(id));
@@ -182,13 +216,15 @@ async function playChime(kind) {
 
 // ---------- events ----------
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === END_ALARM) {
-    await advance(true);
-  } else if (alarm.name === TICK_ALARM) {
-    const { state } = await load();
-    if (state.status === 'running' && state.endTime <= Date.now()) await advance(true);
-    else await updateBadge(state);
-  }
+  await serial(async () => {
+    if (alarm.name === END_ALARM) {
+      await advance(true);
+    } else if (alarm.name === TICK_ALARM) {
+      const { state } = await load();
+      if (state.status === 'running' && state.endTime <= Date.now()) await advance(true);
+      else await updateBadge(state);
+    }
+  });
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -199,18 +235,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     reset,
     skip: () => advance(false),
     setPhase: () => setPhase(msg.phase),
+    setMinutes: () => setMinutes(msg.minutes),
     toggle: async () => ((await load()).state.status === 'running' ? pause() : start()),
   };
   const fn = actions[msg?.type];
   if (!fn) return false;
-  fn().then(() => sendResponse({ ok: true }), (e) => sendResponse({ ok: false, error: String(e) }));
+  serial(fn).then(() => sendResponse({ ok: true }), (e) => sendResponse({ ok: false, error: String(e) }));
   return true;
 });
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== 'toggle-timer') return;
-  const { state } = await load();
-  state.status === 'running' ? await pause() : await start();
+  await serial(async () => ((await load()).state.status === 'running' ? pause() : start()));
 });
 
 // When settings change, an idle timer should show the new duration.
@@ -227,8 +263,10 @@ chrome.runtime.onInstalled.addListener(async () => {
   await updateBadge(state);
 });
 
-chrome.runtime.onStartup.addListener(async () => {
-  const { state } = await load();
-  if (state.status === 'running' && state.endTime <= Date.now()) await advance(true);
-  else await updateBadge(state);
-});
+chrome.runtime.onStartup.addListener(() =>
+  serial(async () => {
+    const { state } = await load();
+    if (state.status === 'running' && state.endTime <= Date.now()) await advance(true);
+    else await updateBadge(state);
+  })
+);

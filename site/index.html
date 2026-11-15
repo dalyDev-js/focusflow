@@ -7,11 +7,13 @@
   <meta name="description" content="FocusFlow is a calm Pomodoro timer extension for Chrome: focus sessions, short and long breaks, notifications and daily stats." />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <style>
+    @font-face { font-family:'Manrope'; src:url('fonts/manrope.woff2') format('woff2'); font-weight:200 800; font-display:swap; }
+    @font-face { font-family:'Space Grotesk'; src:url('fonts/space-grotesk.woff2') format('woff2'); font-weight:300 700; font-display:swap; }
     :root { --bg:#0b0d11; --panel:#14171e; --line:#232733; --text:#eef0f4; --muted:#8b91a0; --red:#ff6b5b; --green:#3ecf8e; --blue:#5b8cff; }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     html, body { overflow-x: clip; }
-    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); font:500 16px/1.6 'Manrope', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
     a { color: inherit; }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
     nav { display:flex; align-items:center; justify-content:space-between; padding:20px 0; }
@@ -23,18 +25,19 @@
     .hero { display:grid; grid-template-columns: 1.1fr 1fr; gap:48px; align-items:center; padding:48px 0 80px; position:relative; }
     .hero::before { content:''; position:absolute; inset:-120px -200px auto; height:520px; background: radial-gradient(40% 50% at 70% 40%, rgba(255,107,91,.18), transparent 70%), radial-gradient(30% 40% at 30% 60%, rgba(91,140,255,.12), transparent 70%); z-index:-1; pointer-events:none; }
     .pill { display:inline-block; font-size:13px; color:var(--red); background:rgba(255,107,91,.1); border:1px solid rgba(255,107,91,.25); padding:4px 12px; border-radius:999px; }
-    h1 { font-size: clamp(36px, 6vw, 60px); line-height:1.05; margin:18px 0; letter-spacing:-1.5px; }
-    h1 span { background: linear-gradient(90deg, var(--red), #ff4d6d 40%, var(--blue)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    h1 { font-family:'Space Grotesk', sans-serif; font-weight:600; font-size: clamp(38px, 6.4vw, 64px); line-height:1.02; margin:18px 0; letter-spacing:-2px; }
+    h2, .card h3 { font-family:'Space Grotesk', sans-serif; font-weight:600; }
+    h1 span { background: linear-gradient(90deg, #ff7a59, #ff3d71 35%, #a66bff 70%, #7c9cff); -webkit-background-clip:text; background-clip:text; color:transparent; }
     .lead { color:var(--muted); font-size:18px; max-width: 520px; }
     .cta { display:flex; gap:12px; flex-wrap:wrap; margin-top:28px; }
     .btn { display:inline-flex; align-items:center; gap:8px; padding:13px 24px; border-radius:999px; font-weight:700; text-decoration:none; transition: transform .12s, filter .2s; }
     .btn:hover { filter:brightness(1.08); } .btn:active { transform: scale(.97); }
-    .btn.primary { background: var(--red); color:#0b0d11; box-shadow: 0 10px 30px rgba(255,107,91,.25); }
+    .btn.primary { background: linear-gradient(135deg, #ff7a59, #ff3d71); color:#fff; box-shadow: 0 10px 30px rgba(255,107,91,.25); }
     .btn.ghost { border:1px solid var(--line); color:var(--text); }
     .meta { color:var(--muted); font-size:13px; margin-top:12px; }
 
     .shots { position:relative; height:520px; }
-    .shots img { position:absolute; width:300px; border-radius:18px; border:1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.55); }
+    .shots img { position:absolute; width:300px; border-radius:22px; border:1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.55); }
     .shots img:first-child { left:0; top:0; transform: rotate(-3deg); z-index:2; }
     .shots img:last-child { right:0; top:40px; transform: rotate(4deg); opacity:.9; }
 
@@ -44,7 +47,7 @@
 
     .cycle { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .chip { padding:10px 16px; border-radius:12px; font-weight:600; font-size:14px; border:1px solid var(--line); background:var(--panel); }
-    .chip.f { color:var(--red); } .chip.s { color:var(--green); } .chip.l { color:var(--blue); }
+    .chip.f { color:var(--red); } .chip.s { color:#34e3a0; } .chip.l { color:#a69bff; }
     .arrow { color:var(--muted); }
 
     .features { display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; }
@@ -92,7 +95,7 @@
           </a>
           <a class="btn ghost" href="#install">Install guide</a>
         </div>
-        <p class="meta">Free and open source · No account · No tracking · v1.0.0</p>
+        <p class="meta">Free and open source · No account · No tracking · v1.1.0</p>
       </div>
       <div class="shots">
         <img src="popup-focus.webp" alt="FocusFlow popup during a focus session" />
@@ -118,9 +121,9 @@
         <div class="card"><div class="ic">⏱️</div><h3>Reliable timer</h3><p>Runs in the background with <code>chrome.alarms</code>, even when the popup is closed.</p></div>
         <div class="card"><div class="ic">🔔</div><h3>Break reminders</h3><p>Desktop notifications with a one-click "Start break" button and a soft chime.</p></div>
         <div class="card"><div class="ic">🏷️</div><h3>Badge countdown</h3><p>Minutes left show on the toolbar icon, colored by phase.</p></div>
-        <div class="card"><div class="ic">📈</div><h3>Daily stats</h3><p>Sessions, focus minutes, day streak and a daily goal bar.</p></div>
-        <div class="card"><div class="ic">⚙️</div><h3>Your rhythm</h3><p>Custom durations, long-break interval and auto-start options.</p></div>
-        <div class="card"><div class="ic">⌨️</div><h3>Shortcuts</h3><p><code>Alt+Shift+P</code> anywhere, or <code>Space</code> in the popup, to start or pause.</p></div>
+        <div class="card"><div class="ic">📈</div><h3>Daily stats</h3><p>Sessions, focus minutes, day streak, a 7-day chart and a daily goal.</p></div>
+        <div class="card"><div class="ic">✏️</div><h3>Set any time</h3><p>Click the clock and type <code>40</code> or <code>12:30</code>, or tap a preset. Works mid-session too.</p></div>
+        <div class="card"><div class="ic">⌨️</div><h3>Shortcuts</h3><p><code>Space</code> start/pause, digits set the time, <code>↑</code><code>↓</code> ±1 min, <code>←</code><code>→</code> switch phase, <code>Alt+Shift+P</code> from any tab.</p></div>
       </div>
     </section>
 
