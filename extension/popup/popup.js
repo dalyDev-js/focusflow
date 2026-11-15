@@ -1,10 +1,13 @@
-import { PHASES, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, formatMs } from '../shared.js';
+import {
+  PHASES, CUSTOM_COLORS, MAX_CUSTOM, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, formatMs,
+  findCustom, isWork, phaseLabel, phaseMinutes,
+} from '../shared.js';
 
 const $ = (id) => document.getElementById(id);
 const R = 104;
 const CIRC = 2 * Math.PI * R;
-const PHASE_ORDER = ['focus', 'short', 'long'];
 const PRESETS = { focus: [15, 25, 45, 60], short: [3, 5, 10], long: [15, 20, 30] };
+const tabOrder = () => ['focus', ...(settings.custom || []).map((c) => c.id), 'short', 'long'];
 const MANTRAS = {
   focus: ['One thing at a time.', 'Deep work mode. Notifications can wait.', 'Small steps, steady progress.'],
   short: ['Stand up, stretch, breathe.', 'Look away from the screen for a bit.', 'Grab some water.'],
@@ -66,7 +69,7 @@ function renderTime() {
   progress.style.strokeDashoffset = CIRC * (1 - frac);
   $('head').style.transform = `rotate(${frac * 360 - 90}deg)`;
   if (state.status === 'running') {
-    document.title = `${formatMs(left)} · ${PHASES[state.phase].label}`;
+    document.title = `${formatMs(left)} · ${phaseLabel(state.phase, settings)}`;
     raf = requestAnimationFrame(renderTime);
   }
 }
@@ -74,35 +77,33 @@ function renderTime() {
 function render() {
   cancelAnimationFrame(raf);
   const b = document.body;
-  b.dataset.phase = state.phase;
+  const custom = findCustom(state.phase, settings);
+  b.dataset.phase = custom ? 'custom' : state.phase;
+  if (custom) applyCustomColors(custom);
   for (const s of ['idle', 'running', 'paused']) b.classList.toggle(s, state.status === s);
-  setCharged(state.phase === 'focus' && state.status === 'running');
+  setCharged(isWork(state.phase) && state.status === 'running');
 
-  // segmented control
-  const idx = PHASE_ORDER.indexOf(state.phase);
-  document.querySelector('.seg').style.setProperty('--i', idx);
-  document.querySelectorAll('.seg button').forEach((btn) =>
-    btn.setAttribute('aria-selected', String(btn.dataset.phase === state.phase))
-  );
+  renderTabs();
+  const idx = tabOrder().indexOf(state.phase);
 
-  $('phaseLabel').textContent = state.status === 'paused' ? 'Paused' : PHASES[state.phase].label;
+  $('phaseLabel').textContent = state.status === 'paused' ? 'Paused' : phaseLabel(state.phase, settings);
   $('mainLabel').textContent = state.status === 'running' ? 'Pause' : state.status === 'paused' ? 'Resume' : 'Start';
   $('editHint').textContent = state.status === 'idle' ? 'click to edit' : 'click to change time left';
 
   // presets (shown when idle)
   const presets = $('presets');
   presets.replaceChildren(
-    ...(state.status === 'idle' ? PRESETS[state.phase] : []).map((m) => {
+    ...(state.status === 'idle' ? PRESETS[state.phase] || PRESETS.focus : []).map((m) => {
       const btn = document.createElement('button');
       btn.textContent = `${m} min`;
-      if (Number(settings[state.phase]) === m) btn.className = 'on';
+      if (phaseMinutes(state.phase, settings) === m) btn.className = 'on';
       btn.addEventListener('click', () => send('setMinutes', { minutes: m }));
       return btn;
     })
   );
 
   // mantra stays stable per phase within a popup open
-  const list = MANTRAS[state.phase];
+  const list = MANTRAS[state.phase] || [`All in on ${custom?.name}.`, 'One task, full attention.', 'Small steps, steady progress.'];
   $('mantra').textContent = list[(new Date().getHours() + idx) % list.length];
   $('mantra').hidden = state.status === 'idle';
   presets.hidden = state.status !== 'idle';
@@ -158,6 +159,123 @@ function streak() {
   }
   return count;
 }
+
+// ---------- tabs: Focus, your custom tabs, Short break, Long break ----------
+function hexToRgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function applyCustomColors(c) {
+  const { a1, a2 } = CUSTOM_COLORS[c.color % CUSTOM_COLORS.length];
+  const b = document.body.style;
+  b.setProperty('--c1', a1);
+  b.setProperty('--c2', a2);
+  b.setProperty('--cglow', hexToRgba(a1, 0.35));
+  b.setProperty('--ctint', hexToRgba(a1, 0.14));
+}
+
+function renderTabs() {
+  const seg = $('seg');
+  const customs = settings.custom || [];
+  const short = customs.length > 0; // shorter labels when there are custom tabs
+  const pill = document.createElement('span');
+  pill.className = 'seg-pill';
+  pill.setAttribute('aria-hidden', 'true');
+  const buttons = tabOrder().map((phase) => {
+    const btn = document.createElement('button');
+    btn.setAttribute('role', 'tab');
+    btn.dataset.phase = phase;
+    btn.setAttribute('aria-selected', String(phase === state.phase));
+    const c = findCustom(phase, settings);
+    if (c) {
+      const sw = document.createElement('i');
+      sw.className = 'swatch';
+      sw.style.background = sw.style.color = CUSTOM_COLORS[c.color % CUSTOM_COLORS.length].a1;
+      btn.append(sw, c.name);
+      const del = document.createElement('span');
+      del.className = 'del';
+      del.textContent = '×';
+      del.title = `Delete "${c.name}"`;
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteCustom(c.id);
+      });
+      btn.append(del);
+    } else {
+      btn.textContent = short ? PHASES[phase].label.replace(' break', '') : PHASES[phase].label;
+    }
+    btn.addEventListener('click', () => send('setPhase', { phase }));
+    return btn;
+  });
+  seg.replaceChildren(pill, ...buttons);
+
+  const addBtn = $('addBtn');
+  addBtn.disabled = customs.length >= MAX_CUSTOM;
+  addBtn.title = addBtn.disabled ? `Up to ${MAX_CUSTOM} custom tabs` : 'New tab (N)';
+
+  seg.classList.toggle('overflow', seg.scrollWidth > seg.clientWidth + 1);
+  // Place the sliding pill under the selected tab and keep it in view.
+  const sel = buttons.find((x) => x.dataset.phase === state.phase);
+  if (sel) {
+    pill.style.setProperty('--x', `${sel.offsetLeft}px`);
+    pill.style.setProperty('--w', `${sel.offsetWidth}px`);
+    const left = sel.offsetLeft - 8;
+    const right = sel.offsetLeft + sel.offsetWidth + 8 - seg.clientWidth;
+    if (seg.scrollLeft > left) seg.scrollLeft = left;
+    else if (seg.scrollLeft < right) seg.scrollLeft = right;
+  }
+}
+$('seg').addEventListener('scroll', (e) => {
+  const seg = e.currentTarget;
+  seg.classList.toggle('at-end', seg.scrollLeft + seg.clientWidth >= seg.scrollWidth - 2);
+});
+
+function openAddTab() {
+  if ((settings.custom || []).length >= MAX_CUSTOM || $('timerView').hidden) return;
+  $('tabsRow').hidden = true;
+  $('addTab').hidden = false;
+  $('addName').value = '';
+  $('addMin').value = 25;
+  $('addName').focus();
+}
+
+function closeAddTab() {
+  if ($('addTab').hidden) return;
+  $('addTab').hidden = true;
+  $('tabsRow').hidden = false;
+  renderTabs();
+}
+
+async function createCustom(name, minutes) {
+  const customs = [...(settings.custom || [])];
+  const used = new Set(customs.map((c) => c.color));
+  let color = 0;
+  while (used.has(color) && color < CUSTOM_COLORS.length) color++;
+  const tab = { id: `c_${Date.now().toString(36)}`, name, minutes, color: color % CUSTOM_COLORS.length };
+  customs.push(tab);
+  await chrome.storage.local.set({ settings: { ...settings, custom: customs } });
+  await send('setPhase', { phase: tab.id });
+}
+
+async function deleteCustom(id) {
+  const customs = (settings.custom || []).filter((c) => c.id !== id);
+  await chrome.storage.local.set({ settings: { ...settings, custom: customs } });
+}
+
+$('addBtn').addEventListener('click', openAddTab);
+$('addCancel').addEventListener('click', closeAddTab);
+$('addTab').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); closeAddTab(); }
+});
+$('addTab').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('addName').value.trim().replace(/\s+/g, ' ');
+  const minutes = Math.min(180, Math.max(1, Math.round(Number($('addMin').value) || 25)));
+  if (!name) return $('addName').focus();
+  closeAddTab();
+  await createCustom(name, minutes);
+});
 
 // ---------- charged focus: a bold lightning bolt strikes across the dial ----------
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -264,9 +382,6 @@ function nudge(deltaMin) {
 $('mainBtn').addEventListener('click', () => send(state.status === 'running' ? 'pause' : 'start'));
 $('resetBtn').addEventListener('click', () => send('reset'));
 $('skipBtn').addEventListener('click', () => send('skip'));
-document.querySelectorAll('.seg button').forEach((btn) =>
-  btn.addEventListener('click', () => send('setPhase', { phase: btn.dataset.phase }))
-);
 
 document.addEventListener('keydown', (e) => {
   if (editing || $('timerView').hidden || e.target.closest('input')) return;
@@ -278,20 +393,50 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'e' || k === 'enter') { e.preventDefault(); openEditor(); }
   else if (k === 'r') send('reset');
   else if (k === 's') send('skip');
+  else if (k === 'n') { e.preventDefault(); openAddTab(); }
   else if (k === 'arrowleft' || k === 'arrowright') {
     e.preventDefault();
-    const i = PHASE_ORDER.indexOf(state.phase) + (k === 'arrowright' ? 1 : -1);
-    send('setPhase', { phase: PHASE_ORDER[(i + 3) % 3] });
+    const order = tabOrder();
+    const i = order.indexOf(state.phase) + (k === 'arrowright' ? 1 : -1);
+    send('setPhase', { phase: order[(i + order.length) % order.length] });
   }
   else if (/^\d$/.test(k)) openEditor(); // the typed digit replaces the selected value
 });
 
 // ---------- settings ----------
 const form = $('settingsForm');
+function renderCustomRows() {
+  const g = $('customGroup');
+  const customs = settings.custom || [];
+  if (!customs.length) {
+    const p = document.createElement('div');
+    p.className = 'empty';
+    p.textContent = 'No custom tabs yet. Use the + next to the tabs to add one, like "PR Review".';
+    return g.replaceChildren(p);
+  }
+  g.replaceChildren(
+    ...customs.map((c) => {
+      const row = document.createElement('div');
+      row.className = 'crow';
+      row.dataset.id = c.id;
+      row.innerHTML = `<i class="swatch"></i><input class="cname" maxlength="18" aria-label="Tab name" />
+        <span class="num"><button type="button" data-step="-1">−</button><input type="number" class="cmin" min="1" max="180" aria-label="Minutes" /><button type="button" data-step="1">+</button></span>
+        <button type="button" class="remove" title="Delete tab" aria-label="Delete tab">×</button>`;
+      row.querySelector('.swatch').style.background = CUSTOM_COLORS[c.color % CUSTOM_COLORS.length].a1;
+      row.querySelector('.cname').value = c.name;
+      row.querySelector('.cmin').value = Math.round(c.minutes * 100) / 100;
+      row.querySelector('.remove').addEventListener('click', () => row.remove());
+      return row;
+    })
+  );
+}
+
 function showSettings(show) {
+  closeAddTab();
   $('timerView').hidden = show;
   $('settingsView').hidden = !show;
-  if (!show) return;
+  if (!show) return render();
+  renderCustomRows();
   for (const [k, v] of Object.entries(settings)) {
     const el = form.elements[k];
     if (!el) continue;
@@ -310,6 +455,15 @@ form.addEventListener('click', (e) => {
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const next = { ...settings };
+  next.custom = [...$('customGroup').querySelectorAll('.crow')].map((row) => {
+    const old = findCustom(row.dataset.id, settings);
+    const mins = Number(row.querySelector('.cmin').value);
+    return {
+      ...old,
+      name: row.querySelector('.cname').value.trim() || old.name,
+      minutes: Number.isFinite(mins) && mins > 0 ? Math.min(180, mins) : old.minutes,
+    };
+  });
   for (const el of form.elements) {
     if (!el.name) continue;
     if (el.type === 'checkbox') next[el.name] = el.checked;

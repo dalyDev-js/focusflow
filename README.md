@@ -14,6 +14,7 @@ A calm **Pomodoro timer** Chrome extension (Manifest V3). Focus for 25 minutes, 
 - Desktop notifications with a "Start break / Start focus" button, plus a synthesized chime (offscreen document)
 - Toolbar badge showing minutes left, colored by phase
 - Daily stats: sessions, focus minutes, day streak, a 7-day chart and a daily goal
+- Custom tabs: create your own session types like "PR Review" or "Emails" with their own duration and colour (+ button or `N`). Breaks return you to the tab you were working on, and stats track minutes per tab
 - Click the clock and type any time (`40`, `12:30`), use presets, or adjust mid-session
 - Settings for every duration, long-break interval, auto-start and sound
 - Keyboard: `Space` start/pause, digits set the time, `↑`/`↓` ±1 min (Shift ±5), `←`/`→` switch phase, `Alt+Shift+P` from any tab

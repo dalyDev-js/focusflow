@@ -1,4 +1,7 @@
-import { PHASES, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs } from './shared.js';
+import {
+  DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, phaseMinutes, phaseLabel, phaseColor,
+  phaseExists, findCustom, isWork,
+} from './shared.js';
 
 const END_ALARM = 'phase-end';
 const TICK_ALARM = 'badge-tick';
@@ -30,8 +33,9 @@ async function saveState(state) {
 }
 
 // ---------- badge ----------
-async function updateBadge(state) {
-  const color = PHASES[state.phase].color;
+async function updateBadge(state, settings) {
+  settings ??= (await load()).settings;
+  const color = phaseColor(state.phase, settings);
   await chrome.action.setBadgeBackgroundColor({ color });
   if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: '#ffffff' });
 
@@ -44,7 +48,7 @@ async function updateBadge(state) {
     await chrome.action.setBadgeText({ text: '' });
   }
   await chrome.action.setTitle({
-    title: `FocusFlow · ${PHASES[state.phase].label}${state.status === 'running' ? ' (running)' : ''}`,
+    title: `FocusFlow · ${phaseLabel(state.phase, settings)}${state.status === 'running' ? ' (running)' : ''}`,
   });
 }
 
@@ -83,9 +87,10 @@ async function reset() {
 }
 
 async function setPhase(phase) {
-  if (!PHASES[phase]) return;
-  const { state } = await load();
+  const { state, settings } = await load();
+  if (!phaseExists(phase, settings)) return;
   state.phase = phase;
+  if (isWork(phase)) state.lastWork = phase;
   state.status = 'idle';
   state.endTime = null;
   state.remainingMs = null;
@@ -101,7 +106,10 @@ async function setMinutes(minutes) {
   if (!Number.isFinite(ms)) return;
   const { state, settings } = await load();
   if (state.status === 'idle') {
-    settings[state.phase] = Math.round((ms / 60000) * 100) / 100;
+    const mins = Math.round((ms / 60000) * 100) / 100;
+    const custom = findCustom(state.phase, settings);
+    if (custom) custom.minutes = mins;
+    else settings[state.phase] = mins;
     await chrome.storage.local.set({ settings });
     await saveState(state);
     return;
@@ -122,16 +130,20 @@ async function advance(completed) {
   if (completed && !(state.status === 'running' && state.endTime <= Date.now() + 1000)) return;
   const finished = state.phase;
 
-  if (finished === 'focus') {
+  if (isWork(finished)) {
     if (completed) {
       const key = todayKey();
       const day = stats[key] || { sessions: 0, minutes: 0 };
+      const mins = phaseMinutes(finished, settings);
       day.sessions += 1;
-      day.minutes += Number(settings.focus);
+      day.minutes += mins;
+      const label = phaseLabel(finished, settings);
+      day.byTab = { ...day.byTab, [label]: (day.byTab?.[label] || 0) + mins };
       stats[key] = day;
       pruneStats(stats);
       await chrome.storage.local.set({ stats });
     }
+    state.lastWork = finished;
     state.cycle = (state.cycle || 0) + 1;
     if (state.cycle >= settings.longEvery) {
       state.phase = 'long';
@@ -140,7 +152,8 @@ async function advance(completed) {
       state.phase = 'short';
     }
   } else {
-    state.phase = 'focus';
+    // After a break, go back to whatever you were working on (e.g. "PR Review").
+    state.phase = phaseExists(state.lastWork, settings) ? state.lastWork : 'focus';
   }
 
   state.status = 'idle';
@@ -152,10 +165,10 @@ async function advance(completed) {
 
   if (completed) {
     await notify(finished, state.phase, settings);
-    if (settings.sound) await playChime(finished === 'focus' ? 'break' : 'focus');
+    if (settings.sound) await playChime(isWork(finished) ? 'break' : 'focus');
   }
 
-  const autoStart = state.phase === 'focus' ? settings.autoStartFocus : settings.autoStartBreaks;
+  const autoStart = isWork(state.phase) ? settings.autoStartFocus : settings.autoStartBreaks;
   if (autoStart) await start();
 }
 
@@ -166,18 +179,24 @@ function pruneStats(stats) {
 
 // ---------- notifications ----------
 async function notify(finished, next, settings) {
-  const messages = {
-    focus: {
-      title: 'Focus session done 🎉',
+  const nextName = phaseLabel(next, settings);
+  const nextMins = phaseMinutes(next, settings);
+  const work = nextName === 'Focus' ? 'focus session' : `${nextName} session`;
+  let m;
+  if (isWork(finished)) {
+    const name = phaseLabel(finished, settings);
+    m = {
+      title: `${name === 'Focus' ? 'Focus session' : name} done 🎉`,
       message:
         next === 'long'
-          ? `Great work! Time for a ${settings.long} minute long break.`
-          : `Nice! Take a ${settings.short} minute break. Stretch, breathe, drink water.`,
-    },
-    short: { title: 'Break is over ☕', message: `Ready for another ${settings.focus} minute focus session?` },
-    long: { title: 'Long break is over 🌿', message: `Recharged? Let's start a fresh ${settings.focus} minute focus round.` },
-  };
-  const m = messages[finished];
+          ? `Great work! Time for a ${nextMins} minute long break.`
+          : `Nice! Take a ${nextMins} minute break. Stretch, breathe, drink water.`,
+    };
+  } else if (finished === 'short') {
+    m = { title: 'Break is over ☕', message: `Ready for another ${nextMins} minute ${work}?` };
+  } else {
+    m = { title: 'Long break is over 🌿', message: `Recharged? Let's start a fresh ${nextMins} minute ${work}.` };
+  }
   await chrome.notifications.clear(NOTIFICATION_ID);
   await chrome.notifications.create(NOTIFICATION_ID, {
     type: 'basic',
@@ -186,7 +205,7 @@ async function notify(finished, next, settings) {
     message: m.message,
     priority: 2,
     requireInteraction: true,
-    buttons: [{ title: next === 'focus' ? 'Start focus' : 'Start break' }, { title: 'Dismiss' }],
+    buttons: [{ title: isWork(next) ? `Start ${nextName}` : 'Start break' }, { title: 'Dismiss' }],
   });
 }
 
@@ -249,12 +268,19 @@ chrome.commands.onCommand.addListener(async (command) => {
   await serial(async () => ((await load()).state.status === 'running' ? pause() : start()));
 });
 
-// When settings change, an idle timer should show the new duration.
-chrome.storage.onChanged.addListener(async (changes, area) => {
-  if (area === 'local' && changes.settings) {
-    const { state } = await load();
-    if (state.status === 'idle') await updateBadge(state);
-  }
+// When settings change: if the current custom tab was deleted, fall back to Focus.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  serial(async () => {
+    const { state, settings } = await load();
+    if (!phaseExists(state.phase, settings)) await setPhase('focus');
+    else await updateBadge(state, settings);
+    if (!phaseExists(state.lastWork, settings)) {
+      const fresh = (await load()).state;
+      fresh.lastWork = 'focus';
+      await chrome.storage.local.set({ state: fresh });
+    }
+  });
 });
 
 chrome.runtime.onInstalled.addListener(async () => {

@@ -1,10 +1,22 @@
 // Shared constants and helpers used by the service worker and the popup.
 
 export const PHASES = {
-  focus: { label: 'Focus', color: '#ff6b5b' },
-  short: { label: 'Short break', color: '#3ecf8e' },
-  long: { label: 'Long break', color: '#5b8cff' },
+  focus: { label: 'Focus', color: '#ff5c66' },
+  short: { label: 'Short break', color: '#23cdaa' },
+  long: { label: 'Long break', color: '#8c78ff' },
 };
+
+// Colour pairs for custom tabs, picked in order as tabs are created.
+export const CUSTOM_COLORS = [
+  { a1: '#ffb547', a2: '#ff7a2f' }, // amber
+  { a1: '#ff7ad9', a2: '#b46bff' }, // pink
+  { a1: '#4dd7ff', a2: '#3d7bff' }, // sky
+  { a1: '#b7f34d', a2: '#2fcf7d' }, // lime
+  { a1: '#ffd84d', a2: '#ff9f1c' }, // gold
+  { a1: '#ff8a8a', a2: '#e0477a' }, // rose
+];
+
+export const MAX_CUSTOM = 6;
 
 export const DEFAULT_SETTINGS = {
   focus: 25,
@@ -15,15 +27,45 @@ export const DEFAULT_SETTINGS = {
   autoStartFocus: false,
   sound: true,
   dailyGoal: 8,
+  custom: [], // [{ id, name, minutes, color }]
 };
 
 export const DEFAULT_STATE = {
-  phase: 'focus',
+  phase: 'focus', // 'focus' | 'short' | 'long' | a custom tab id
+  lastWork: 'focus', // the work tab to return to after a break
   status: 'idle', // idle | running | paused
   endTime: null, // epoch ms while running
   remainingMs: null, // ms left while paused / idle
-  cycle: 0, // completed focus sessions in the current long-break cycle
+  cycle: 0, // completed work sessions in the current long-break cycle
 };
+
+export function findCustom(phase, settings) {
+  return (settings.custom || []).find((c) => c.id === phase) || null;
+}
+
+export function phaseExists(phase, settings) {
+  return Boolean(PHASES[phase] || findCustom(phase, settings));
+}
+
+// Focus and every custom tab are "work" sessions; short and long are breaks.
+export function isWork(phase) {
+  return phase !== 'short' && phase !== 'long';
+}
+
+export function phaseLabel(phase, settings) {
+  return PHASES[phase]?.label ?? findCustom(phase, settings)?.name ?? 'Focus';
+}
+
+export function phaseColor(phase, settings) {
+  if (PHASES[phase]) return PHASES[phase].color;
+  const c = findCustom(phase, settings);
+  return c ? CUSTOM_COLORS[c.color % CUSTOM_COLORS.length].a1 : PHASES.focus.color;
+}
+
+export function phaseMinutes(phase, settings) {
+  const c = findCustom(phase, settings);
+  return Number(c ? c.minutes : settings[phase] ?? settings.focus);
+}
 
 export function todayKey(d = new Date()) {
   const y = d.getFullYear();
@@ -33,7 +75,7 @@ export function todayKey(d = new Date()) {
 }
 
 export function phaseMs(phase, settings) {
-  return Math.round(Number(settings[phase]) * 60 * 1000);
+  return Math.round(phaseMinutes(phase, settings) * 60 * 1000);
 }
 
 export function formatMs(ms) {
