@@ -9,6 +9,7 @@ A calm **Pomodoro timer** Chrome extension (Manifest V3). Focus for 25 minutes, 
 ## Features
 
 - Focus, short break and long break phases with an animated progress ring
+- Charged focus mode: yellow lightning strikes crackle around the ring while a focus session runs (respects reduced-motion)
 - Runs in the background with `chrome.alarms`, so it keeps going when the popup is closed
 - Desktop notifications with a "Start break / Start focus" button, plus a synthesized chime (offscreen document)
 - Toolbar badge showing minutes left, colored by phase

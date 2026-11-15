@@ -6,7 +6,7 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <div class="ambient" aria-hidden="true"><i class="blob a"></i><i class="blob b"></i><i class="grain"></i></div>
+  <div class="ambient" aria-hidden="true"><i class="blob a"></i><i class="blob b"></i><i class="blob c"></i><i class="flash" id="flash"></i><i class="grain"></i></div>
 
   <main id="app" data-phase="focus">
     <header class="top">
@@ -41,8 +41,10 @@
           <g id="head"><circle class="head-glow" cx="234" cy="130" r="10" /><circle class="head" cx="234" cy="130" r="5" /></g>
         </svg>
 
+        <svg class="bolts" id="bolts" viewBox="-40 -40 340 340" aria-hidden="true"></svg>
+
         <div class="dial-center">
-          <span class="phase-label" id="phaseLabel">Focus</span>
+          <span class="phase-label"><svg class="zap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2 4 13.5h6.5L9.5 22 20 9.5h-6.5z"/></svg><span id="phaseLabel">Focus</span></span>
           <button class="time" id="time" title="Click to edit · ↑ ↓ to adjust" aria-label="Edit time">25:00</button>
           <form class="time-edit" id="timeEdit" hidden>
             <input id="timeInput" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Minutes (or mm:ss)" />

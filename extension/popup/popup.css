@@ -164,3 +164,35 @@ h2 { margin: 0; font-size: 16px; font-weight: 700; }
 .switch input:checked + i { background: linear-gradient(135deg, var(--a1), var(--a2)); }
 .switch input:checked + i::after { transform: translateX(16px); }
 .hint { color: var(--muted); font-size: 12px; margin: 4px 2px 12px; }
+
+/* ---------- charged focus: yellow lightning while a focus session runs ---------- */
+:root { --volt: #ffd84d; --volt-hot: #fff6c2; --volt-glow: rgba(255, 210, 60, 0.55); }
+.blob.c { background: var(--volt); width: 180px; height: 180px; top: 120px; left: 90px; opacity: 0; filter: blur(80px); transition: opacity 1s; }
+body.charged .blob.c { opacity: 0.16; animation: drift 9s ease-in-out infinite alternate; }
+.flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(60% 45% at var(--fx, 50%) var(--fy, 30%), rgba(255, 226, 110, 0.38), transparent 70%); }
+.flash.on { animation: flash 0.7s ease-out; }
+@keyframes flash { 0% { opacity: 0; } 8% { opacity: 1; } 18% { opacity: 0.25; } 28% { opacity: 0.85; } 100% { opacity: 0; } }
+
+.bolts { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); pointer-events: none; overflow: visible; z-index: 2; }
+.bolts g { animation: zap 0.8s steps(1, end) forwards; }
+.bolts .glow { fill: none; stroke: var(--volt); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; filter: blur(3px); }
+.bolts .core { fill: none; stroke: var(--volt-hot); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--volt)); }
+@keyframes zap { 0% { opacity: 1; } 12% { opacity: 0.15; } 22% { opacity: 1; } 40% { opacity: 0.6; } 55% { opacity: 1; } 75% { opacity: 0.3; } 100% { opacity: 0; } }
+
+.zap-icon { width: 0; height: 12px; margin-right: 0; fill: var(--volt); vertical-align: -1px; filter: drop-shadow(0 0 4px var(--volt-glow)); transition: width 0.3s, margin 0.3s; }
+body.charged .zap-icon { width: 12px; margin-right: 4px; animation: buzz 2.6s infinite; }
+body.charged .phase-label { color: var(--volt); text-shadow: 0 0 12px var(--volt-glow); }
+@keyframes buzz { 0%, 86%, 100% { opacity: 1; } 88% { opacity: 0.2; } 90% { opacity: 1; } 92% { opacity: 0.4; } }
+
+body.charged .progress { animation: surge 2.8s ease-in-out infinite; }
+@keyframes surge { 50% { filter: drop-shadow(0 0 14px var(--volt-glow)); } }
+body.charged .head { fill: var(--volt-hot); }
+body.charged .head-glow { fill: var(--volt); opacity: 0.7; animation: spark 0.9s infinite; }
+@keyframes spark { 0%, 100% { r: 10; opacity: 0.7; } 30% { r: 14; opacity: 0.35; } 60% { r: 8; opacity: 0.8; } }
+body.charged.zapped .progress { filter: drop-shadow(0 0 18px var(--volt)) brightness(1.35); }
+body.charged.zapped .time { text-shadow: 0 0 18px var(--volt-glow); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bolts, .flash { display: none; }
+  body.charged .progress, body.charged .head-glow, body.charged .zap-icon, .blob { animation: none; }
+}
