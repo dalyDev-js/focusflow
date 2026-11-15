@@ -169,25 +169,20 @@ h2 { margin: 0; font-size: 16px; font-weight: 700; }
 :root { --volt: #ffd84d; --volt-hot: #fff6c2; --volt-glow: rgba(255, 210, 60, 0.55); }
 .blob.c { background: var(--volt); width: 180px; height: 180px; top: 120px; left: 90px; opacity: 0; filter: blur(80px); transition: opacity 1s; }
 body.charged .blob.c { opacity: 0.16; animation: drift 9s ease-in-out infinite alternate; }
-/* The bolt rests as a faint emblem behind the time and strikes to full brightness. */
-.bolt { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; pointer-events: none; opacity: 0; transform: scale(0.9); transition: opacity 0.6s, transform 0.6s; overflow: visible; }
-.bolt-body { fill: url(#boltFill); stroke: #3a2600; stroke-width: 1.4; stroke-linejoin: round; }
-.bolt-shadow { fill: #1a1206; opacity: 0.85; }
-body.charged .bolt { opacity: 0.16; transform: none; filter: drop-shadow(0 0 10px var(--volt-glow)); }
-body.charged .bolt.strike { animation: strike 1.5s cubic-bezier(.2,.8,.2,1); }
+/* A small bolt beside the brand name lights up while a focus session runs and strikes every few seconds. */
+.bolt { width: 0; height: 20px; margin-left: -4px; opacity: 0; overflow: visible; transform: scale(0.4) rotate(-20deg); transition: width 0.35s, opacity 0.35s, transform 0.45s cubic-bezier(.3,1.6,.5,1); }
+.bolt-body { fill: url(#boltFill); stroke: #3a2600; stroke-width: 0.6; stroke-linejoin: round; }
+.bolt-shadow { fill: #1a1206; opacity: 0.8; }
+body.charged .bolt { width: 18px; margin-left: -2px; opacity: 1; transform: none; filter: drop-shadow(0 0 5px var(--volt-glow)); }
+body.charged .bolt.strike { animation: strike 1s cubic-bezier(.2,.8,.2,1); }
 @keyframes strike {
-  0% { opacity: 0.16; clip-path: inset(0 0 100% 0); transform: scale(1.12); }
-  10% { opacity: 1; clip-path: inset(0 0 0 0); transform: scale(1.04); filter: drop-shadow(0 0 22px var(--volt)) brightness(1.25); }
-  16% { opacity: 0.55; }
-  22% { opacity: 1; transform: scale(1); }
-  55% { opacity: 1; filter: drop-shadow(0 0 14px var(--volt-glow)); }
-  100% { opacity: 0.16; clip-path: inset(0 0 0 0); }
+  0% { transform: scale(1); }
+  12% { transform: scale(1.45) rotate(-8deg); filter: drop-shadow(0 0 12px var(--volt)) brightness(1.4); }
+  20% { opacity: 0.4; }
+  28% { opacity: 1; transform: scale(1.15); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 5px var(--volt-glow)); }
 }
-body.charged .time { position: relative; z-index: 1; text-shadow: 0 2px 14px rgba(10, 11, 16, 0.85), 0 0 2px rgba(10, 11, 16, 0.9); }
-.dial-center { z-index: 1; }
 
-.zap-icon { width: 0; height: 12px; margin-right: 0; fill: var(--volt); vertical-align: -1px; filter: drop-shadow(0 0 4px var(--volt-glow)); transition: width 0.3s, margin 0.3s; }
-body.charged .zap-icon { width: 12px; margin-right: 4px; animation: buzz 2.6s infinite; }
 body.charged .phase-label { color: var(--volt); text-shadow: 0 0 12px var(--volt-glow); }
 @keyframes buzz { 0%, 86%, 100% { opacity: 1; } 88% { opacity: 0.2; } 90% { opacity: 1; } 92% { opacity: 0.4; } }
 
@@ -199,5 +194,5 @@ body.charged .head-glow { fill: var(--volt); opacity: 0.7; animation: spark 0.9s
 
 @media (prefers-reduced-motion: reduce) {
   .bolt.strike { animation: none !important; }
-  body.charged .progress, body.charged .head-glow, body.charged .zap-icon, .blob { animation: none; }
+  body.charged .progress, body.charged .head-glow, .blob { animation: none; }
 }
