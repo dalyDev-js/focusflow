@@ -1,0 +1,10 @@
+{
+  "name": "focusflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FocusFlow, a Pomodoro timer Chrome extension (Manifest V3) with a landing page on Vercel.",
+  "scripts": {
+    "build": "rm -rf build && mkdir -p build && cp -r extension build/focusflow-extension && cd build && zip -qr ../site/focusflow-extension.zip focusflow-extension && cd .. && rm -rf build"
+  },
+  "license": "MIT"
+}
