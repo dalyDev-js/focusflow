@@ -159,7 +159,7 @@ function streak() {
   return count;
 }
 
-// ---------- lightning: a charged look while a focus session is running ----------
+// ---------- charged focus: a bold lightning bolt strikes across the dial ----------
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let charged = false;
 let strikeTimer = null;
@@ -169,72 +169,20 @@ function setCharged(on) {
   charged = on;
   document.body.classList.toggle('charged', on);
   clearTimeout(strikeTimer);
-  if (on && !reducedMotion) {
-    strikeTimer = setTimeout(strikeLoop, 350); // a first strike right as focus starts
-  }
+  if (on && !reducedMotion) strikeTimer = setTimeout(strikeLoop, 250); // strike as focus starts
 }
 
 function strikeLoop() {
   if (!charged) return;
   strike();
-  if (Math.random() < 0.35) setTimeout(strike, 180 + Math.random() * 220); // occasional double strike
-  strikeTimer = setTimeout(strikeLoop, 3200 + Math.random() * 4500);
-}
-
-// Builds a jagged bolt from a point on the ring outward, with a small branch.
-function boltPoints(angle, r0, r1, segs, jitter) {
-  const pts = [];
-  for (let i = 0; i <= segs; i++) {
-    const t = i / segs;
-    const r = r0 + (r1 - r0) * t;
-    const off = i === 0 ? 0 : (Math.random() - 0.5) * jitter * (1 - t * 0.3);
-    const a = angle + off / r;
-    pts.push([130 + r * Math.cos(a), 130 + r * Math.sin(a)]);
-  }
-  return pts;
+  strikeTimer = setTimeout(strikeLoop, 5000 + Math.random() * 4000);
 }
 
 function strike() {
-  const svg = $('bolts');
-  const ns = 'http://www.w3.org/2000/svg';
-  // Mostly strike from the ring's moving head, sometimes from anywhere on the ring.
-  const frac = Math.min(1, remainingMs() / Math.max(totalMs(), 1));
-  const headAngle = (frac * 360 - 90) * (Math.PI / 180);
-  const angle = Math.random() < 0.6 ? headAngle : Math.random() * Math.PI * 2;
-
-  const main = boltPoints(angle, 112, 160 + Math.random() * 26, 8, 36);
-  const k = 2 + Math.floor(Math.random() * 3);
-  const [bx, by] = main[k];
-  const bAngle = Math.atan2(by - 130, bx - 130) + (Math.random() < 0.5 ? -0.35 : 0.35);
-  const branch = boltPoints(bAngle, Math.hypot(bx - 130, by - 130), 158, 4, 20);
-  branch[0] = [bx, by];
-
-  const g = document.createElementNS(ns, 'g');
-  for (const pts of [main, branch]) {
-    const d = 'M' + pts.map((p) => p.map((n) => n.toFixed(1)).join(' ')).join(' L');
-    for (const cls of ['glow', 'core']) {
-      const path = document.createElementNS(ns, 'path');
-      path.setAttribute('d', d);
-      path.setAttribute('class', cls);
-      if (pts === branch) path.style.strokeWidth = cls === 'core' ? '1' : '4';
-      g.appendChild(path);
-    }
-  }
-  svg.appendChild(g);
-  setTimeout(() => g.remove(), 850);
-
-  // Screen flash centred on the strike, and a quick surge on the ring.
-  const flash = $('flash');
-  const dial = document.querySelector('.dial').getBoundingClientRect();
-  const fx = dial.left + dial.width / 2 + Math.cos(angle) * dial.width * 0.55;
-  const fy = dial.top + dial.height / 2 + Math.sin(angle) * dial.height * 0.55;
-  flash.style.setProperty('--fx', `${(fx / innerWidth) * 100}%`);
-  flash.style.setProperty('--fy', `${(fy / innerHeight) * 100}%`);
-  flash.classList.remove('on');
-  void flash.offsetWidth;
-  flash.classList.add('on');
-  document.body.classList.add('zapped');
-  setTimeout(() => document.body.classList.remove('zapped'), 260);
+  const bolt = $('bolt');
+  bolt.classList.remove('strike');
+  void bolt.getBoundingClientRect(); // restart the animation
+  bolt.classList.add('strike');
 }
 
 // ---------- editable time ----------

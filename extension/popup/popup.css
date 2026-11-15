@@ -169,15 +169,22 @@ h2 { margin: 0; font-size: 16px; font-weight: 700; }
 :root { --volt: #ffd84d; --volt-hot: #fff6c2; --volt-glow: rgba(255, 210, 60, 0.55); }
 .blob.c { background: var(--volt); width: 180px; height: 180px; top: 120px; left: 90px; opacity: 0; filter: blur(80px); transition: opacity 1s; }
 body.charged .blob.c { opacity: 0.16; animation: drift 9s ease-in-out infinite alternate; }
-.flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(60% 45% at var(--fx, 50%) var(--fy, 30%), rgba(255, 226, 110, 0.38), transparent 70%); }
-.flash.on { animation: flash 0.7s ease-out; }
-@keyframes flash { 0% { opacity: 0; } 8% { opacity: 1; } 18% { opacity: 0.25; } 28% { opacity: 0.85; } 100% { opacity: 0; } }
-
-.bolts { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); pointer-events: none; overflow: visible; z-index: 2; }
-.bolts g { animation: zap 0.8s steps(1, end) forwards; }
-.bolts .glow { fill: none; stroke: var(--volt); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.45; filter: blur(3px); }
-.bolts .core { fill: none; stroke: var(--volt-hot); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px var(--volt)); }
-@keyframes zap { 0% { opacity: 1; } 12% { opacity: 0.15; } 22% { opacity: 1; } 40% { opacity: 0.6; } 55% { opacity: 1; } 75% { opacity: 0.3; } 100% { opacity: 0; } }
+/* The bolt rests as a faint emblem behind the time and strikes to full brightness. */
+.bolt { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; pointer-events: none; opacity: 0; transform: scale(0.9); transition: opacity 0.6s, transform 0.6s; overflow: visible; }
+.bolt-body { fill: url(#boltFill); stroke: #3a2600; stroke-width: 1.4; stroke-linejoin: round; }
+.bolt-shadow { fill: #1a1206; opacity: 0.85; }
+body.charged .bolt { opacity: 0.16; transform: none; filter: drop-shadow(0 0 10px var(--volt-glow)); }
+body.charged .bolt.strike { animation: strike 1.5s cubic-bezier(.2,.8,.2,1); }
+@keyframes strike {
+  0% { opacity: 0.16; clip-path: inset(0 0 100% 0); transform: scale(1.12); }
+  10% { opacity: 1; clip-path: inset(0 0 0 0); transform: scale(1.04); filter: drop-shadow(0 0 22px var(--volt)) brightness(1.25); }
+  16% { opacity: 0.55; }
+  22% { opacity: 1; transform: scale(1); }
+  55% { opacity: 1; filter: drop-shadow(0 0 14px var(--volt-glow)); }
+  100% { opacity: 0.16; clip-path: inset(0 0 0 0); }
+}
+body.charged .time { position: relative; z-index: 1; text-shadow: 0 2px 14px rgba(10, 11, 16, 0.85), 0 0 2px rgba(10, 11, 16, 0.9); }
+.dial-center { z-index: 1; }
 
 .zap-icon { width: 0; height: 12px; margin-right: 0; fill: var(--volt); vertical-align: -1px; filter: drop-shadow(0 0 4px var(--volt-glow)); transition: width 0.3s, margin 0.3s; }
 body.charged .zap-icon { width: 12px; margin-right: 4px; animation: buzz 2.6s infinite; }
@@ -189,10 +196,8 @@ body.charged .progress { animation: surge 2.8s ease-in-out infinite; }
 body.charged .head { fill: var(--volt-hot); }
 body.charged .head-glow { fill: var(--volt); opacity: 0.7; animation: spark 0.9s infinite; }
 @keyframes spark { 0%, 100% { r: 10; opacity: 0.7; } 30% { r: 14; opacity: 0.35; } 60% { r: 8; opacity: 0.8; } }
-body.charged.zapped .progress { filter: drop-shadow(0 0 18px var(--volt)) brightness(1.35); }
-body.charged.zapped .time { text-shadow: 0 0 18px var(--volt-glow); }
 
 @media (prefers-reduced-motion: reduce) {
-  .bolts, .flash { display: none; }
+  .bolt.strike { animation: none !important; }
   body.charged .progress, body.charged .head-glow, body.charged .zap-icon, .blob { animation: none; }
 }
