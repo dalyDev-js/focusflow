@@ -1,4 +1,5 @@
 node_modules/
 build/
+dist/
 .vercel/
 .DS_Store

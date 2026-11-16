@@ -19,23 +19,36 @@ A calm **Pomodoro-style focus timer** Chrome extension (Manifest V3). Two tabs, 
 - Click the clock and type any time (`40`, `12:30`), use presets, or adjust mid-session
 - Settings for every duration, long-break interval, auto-start and sound
 - Keyboard: `Space` start/pause, digits set the time, `↑`/`↓` ±1 min (Shift ±5), `←`/`→` switch phase, `Alt+Shift+P` from any tab
-- Zero dependencies, no build step, no tracking (fonts: Manrope and Space Grotesk, OFL)
+- Written in strict TypeScript, bundled with esbuild. No runtime dependencies, no tracking (fonts: Manrope and Space Grotesk, OFL)
 
 ## Install (unpacked)
 
-1. Download `focusflow-extension.zip` from the live page (or clone this repo).
+1. Download `focusflow-extension.zip` from the live page, or build it yourself (below).
 2. Unzip it, open `chrome://extensions` and switch on **Developer mode**.
-3. Click **Load unpacked** and pick the `focusflow-extension` folder (or the `extension/` folder of this repo).
+3. Click **Load unpacked** and pick the `focusflow-extension` folder (or `dist/` if you built it).
 4. Pin FocusFlow from the puzzle-piece menu.
+
+## Develop
+
+```bash
+npm install
+npm run build      # type-check (tsc --strict) + bundle to dist/ + package site/focusflow-extension.zip
+npm run watch      # rebuild dist/ on every change, then hit reload in chrome://extensions
+npm run typecheck  # types only
+```
 
 ## Project layout
 
 ```
-extension/   the Chrome extension (manifest, service worker, popup, offscreen audio)
-site/        static landing page deployed to Vercel, includes the packaged zip
+src/
+  shared.ts        types (Settings, TimerState, CustomTab, Message), constants, helpers
+  background.ts    service worker: timer, alarms, notifications, stats
+  offscreen.ts     plays the chime (MV3 service workers can't play audio)
+  popup/popup.ts   the popup UI
+static/            manifest, HTML, CSS, icons and fonts, copied into dist/ as-is
+build.mjs          esbuild build script
+site/              landing page deployed to Vercel, includes the packaged zip
 ```
-
-`npm run build` re-packages `extension/` into `site/focusflow-extension.zip`.
 
 ## License
 
