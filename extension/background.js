@@ -1,6 +1,6 @@
 import {
   DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, phaseMinutes, phaseLabel, phaseColor,
-  phaseExists, findCustom, isWork,
+  phaseExists, findCustom, isWork, breakEnabled,
 } from './shared.js';
 
 const END_ALARM = 'phase-end';
@@ -145,11 +145,15 @@ async function advance(completed) {
     }
     state.lastWork = finished;
     state.cycle = (state.cycle || 0) + 1;
-    if (state.cycle >= settings.longEvery) {
+    // Breaks only happen if you added them as tabs; otherwise stay on the same tab.
+    if (breakEnabled('long', settings) && state.cycle >= settings.longEvery) {
       state.phase = 'long';
       state.cycle = 0;
-    } else {
+    } else if (breakEnabled('short', settings)) {
       state.phase = 'short';
+    } else {
+      state.phase = finished;
+      if (!breakEnabled('long', settings)) state.cycle = 0;
     }
   } else {
     // After a break, go back to whatever you were working on (e.g. "PR Review").
@@ -168,7 +172,9 @@ async function advance(completed) {
     if (settings.sound) await playChime(isWork(finished) ? 'break' : 'focus');
   }
 
-  const autoStart = isWork(state.phase) ? settings.autoStartFocus : settings.autoStartBreaks;
+  // Never auto-restart the same work tab back to back (no break in between).
+  const sameTab = isWork(finished) && state.phase === finished;
+  const autoStart = !sameTab && (isWork(state.phase) ? settings.autoStartFocus : settings.autoStartBreaks);
   if (autoStart) await start();
 }
 
@@ -187,8 +193,9 @@ async function notify(finished, next, settings) {
     const name = phaseLabel(finished, settings);
     m = {
       title: `${name === 'Focus' ? 'Focus session' : name} done 🎉`,
-      message:
-        next === 'long'
+      message: isWork(next)
+        ? `Nice work! Ready for another ${nextMins} minute ${work}?`
+        : next === 'long'
           ? `Great work! Time for a ${nextMins} minute long break.`
           : `Nice! Take a ${nextMins} minute break. Stretch, breathe, drink water.`,
     };
@@ -205,7 +212,7 @@ async function notify(finished, next, settings) {
     message: m.message,
     priority: 2,
     requireInteraction: true,
-    buttons: [{ title: isWork(next) ? `Start ${nextName}` : 'Start break' }, { title: 'Dismiss' }],
+    buttons: [{ title: isWork(next) ? (next === finished ? 'Go again' : `Start ${nextName}`) : 'Start break' }, { title: 'Dismiss' }],
   });
 }
 
@@ -273,7 +280,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes.settings) return;
   serial(async () => {
     const { state, settings } = await load();
-    if (!phaseExists(state.phase, settings)) await setPhase('focus');
+    if (!phaseExists(state.phase, settings)) {
+      await setPhase(phaseExists(state.lastWork, settings) ? state.lastWork : 'focus');
+    }
     else await updateBadge(state, settings);
     if (!phaseExists(state.lastWork, settings)) {
       const fresh = (await load()).state;

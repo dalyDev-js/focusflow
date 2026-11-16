@@ -1,13 +1,17 @@
 import {
   PHASES, CUSTOM_COLORS, MAX_CUSTOM, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, formatMs,
-  findCustom, isWork, phaseLabel, phaseMinutes,
+  findCustom, isWork, phaseLabel, phaseMinutes, breakEnabled, SUGGESTIONS,
 } from '../shared.js';
 
 const $ = (id) => document.getElementById(id);
 const R = 104;
 const CIRC = 2 * Math.PI * R;
 const PRESETS = { focus: [15, 25, 45, 60], short: [3, 5, 10], long: [15, 20, 30] };
-const tabOrder = () => ['focus', ...(settings.custom || []).map((c) => c.id), 'short', 'long'];
+const tabOrder = () => [
+  'focus',
+  ...(settings.custom || []).map((c) => c.id),
+  ...['short', 'long'].filter((b) => breakEnabled(b, settings)),
+];
 const MANTRAS = {
   focus: ['One thing at a time.', 'Deep work mode. Notifications can wait.', 'Small steps, steady progress.'],
   short: ['Stand up, stretch, breathe.', 'Look away from the screen for a bit.', 'Grab some water.'],
@@ -108,7 +112,8 @@ function render() {
   $('mantra').hidden = state.status === 'idle';
   presets.hidden = state.status !== 'idle';
 
-  // cycle dots
+  // cycle dots (only meaningful when a long break tab exists)
+  $('dots').hidden = !breakEnabled('long', settings);
   $('dots').replaceChildren(
     ...Array.from({ length: settings.longEvery }, (_, i) => {
       const d = document.createElement('i');
@@ -178,7 +183,6 @@ function applyCustomColors(c) {
 function renderTabs() {
   const seg = $('seg');
   const customs = settings.custom || [];
-  const short = customs.length > 0; // shorter labels when there are custom tabs
   const pill = document.createElement('span');
   pill.className = 'seg-pill';
   pill.setAttribute('aria-hidden', 'true');
@@ -203,17 +207,36 @@ function renderTabs() {
       });
       btn.append(del);
     } else {
-      btn.textContent = short ? PHASES[phase].label.replace(' break', '') : PHASES[phase].label;
+      btn.textContent = PHASES[phase].label;
+      if (phase !== 'focus') {
+        const del = document.createElement('span');
+        del.className = 'del';
+        del.textContent = '×';
+        del.title = `Remove ${PHASES[phase].label}`;
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setBreak(phase, false);
+        });
+        btn.append(del);
+      }
     }
     btn.addEventListener('click', () => send('setPhase', { phase }));
     return btn;
   });
-  seg.replaceChildren(pill, ...buttons);
+  seg.replaceChildren(pill, ...buttons, ...quickAddChips());
 
   const addBtn = $('addBtn');
   addBtn.disabled = customs.length >= MAX_CUSTOM;
   addBtn.title = addBtn.disabled ? `Up to ${MAX_CUSTOM} custom tabs` : 'New tab (N)';
 
+  if (justAdded) {
+    const added = buttons.find((x) => x.dataset.phase === justAdded || x.textContent.startsWith(justAdded));
+    if (added) {
+      added.classList.add('pop');
+      if (!sel0(added)) added.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    justAdded = null;
+  }
   seg.classList.toggle('overflow', seg.scrollWidth > seg.clientWidth + 1);
   // Place the sliding pill under the selected tab and keep it in view.
   const sel = buttons.find((x) => x.dataset.phase === state.phase);
@@ -226,10 +249,41 @@ function renderTabs() {
     else if (seg.scrollLeft < right) seg.scrollLeft = right;
   }
 }
+function sel0(el) {
+  return el.getAttribute('aria-selected') === 'true';
+}
 $('seg').addEventListener('scroll', (e) => {
   const seg = e.currentTarget;
   seg.classList.toggle('at-end', seg.scrollLeft + seg.clientWidth >= seg.scrollWidth - 2);
 });
+
+// Dashed placeholder chips: one click adds a ready-made tab.
+function quickAddChips() {
+  const names = new Set((settings.custom || []).map((c) => c.name.toLowerCase()));
+  const full = (settings.custom || []).length >= MAX_CUSTOM;
+  return SUGGESTIONS.filter((sg) =>
+    sg.break ? !breakEnabled(sg.key, settings) : !full && !names.has(sg.name.toLowerCase())
+  ).map((sg) => {
+    const chip = document.createElement('button');
+    chip.className = 'ghost-tab';
+    chip.title = sg.break ? `Add a ${sg.name.toLowerCase()} tab` : `Add "${sg.name}" (${sg.minutes} min)`;
+    chip.innerHTML = '<b>+</b>';
+    chip.append(sg.name);
+    chip.addEventListener('click', async () => {
+      justAdded = sg.break ? sg.key : sg.name;
+      if (sg.break) await setBreak(sg.key, true);
+      else await createCustom(sg.name, sg.minutes);
+    });
+    return chip;
+  });
+}
+
+let justAdded = null;
+
+async function setBreak(key, on) {
+  const breaks = { ...(settings.breaks || {}), [key]: on };
+  await chrome.storage.local.set({ settings: { ...settings, breaks } });
+}
 
 function openAddTab() {
   if ((settings.custom || []).length >= MAX_CUSTOM || $('timerView').hidden) return;

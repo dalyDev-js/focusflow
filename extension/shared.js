@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   sound: true,
   dailyGoal: 8,
   custom: [], // [{ id, name, minutes, color }]
+  breaks: { short: false, long: false }, // break tabs are opt-in via quick add
 };
 
 export const DEFAULT_STATE = {
@@ -43,9 +44,24 @@ export function findCustom(phase, settings) {
   return (settings.custom || []).find((c) => c.id === phase) || null;
 }
 
-export function phaseExists(phase, settings) {
-  return Boolean(PHASES[phase] || findCustom(phase, settings));
+export function breakEnabled(phase, settings) {
+  return Boolean(settings.breaks?.[phase]);
 }
+
+export function phaseExists(phase, settings) {
+  if (phase === 'focus') return true;
+  if (phase === 'short' || phase === 'long') return breakEnabled(phase, settings);
+  return Boolean(findCustom(phase, settings));
+}
+
+// Ready-made tabs offered as dashed "quick add" chips until the user adds them.
+export const SUGGESTIONS = [
+  { key: 'short', name: 'Short break', break: true },
+  { key: 'long', name: 'Long break', break: true },
+  { key: 'pr', name: 'PR Review', minutes: 30 },
+  { key: 'email', name: 'Emails', minutes: 15 },
+  { key: 'deep', name: 'Deep work', minutes: 50 },
+];
 
 // Focus and every custom tab are "work" sessions; short and long are breaks.
 export function isWork(phase) {
