@@ -1,21 +1,17 @@
 import {
   PHASES, CUSTOM_COLORS, MAX_CUSTOM, DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, formatMs,
-  findCustom, isWork, phaseLabel, phaseMinutes, breakEnabled, SUGGESTIONS,
+  findCustom, isWork, phaseLabel, phaseMinutes, COLOR_SETS, IDEAS,
 } from '../shared.js';
 
 const $ = (id) => document.getElementById(id);
 const R = 104;
 const CIRC = 2 * Math.PI * R;
-const PRESETS = { focus: [15, 25, 45, 60], short: [3, 5, 10], long: [15, 20, 30] };
-const tabOrder = () => [
-  'focus',
-  ...(settings.custom || []).map((c) => c.id),
-  ...['short', 'long'].filter((b) => breakEnabled(b, settings)),
-];
+const PRESETS = { work: [15, 25, 45, 60], break: [5, 10, 15, 30] };
+const tabOrder = () => ['focus', 'short', ...(settings.custom || []).map((c) => c.id)];
 const MANTRAS = {
   focus: ['One thing at a time.', 'Deep work mode. Notifications can wait.', 'Small steps, steady progress.'],
   short: ['Stand up, stretch, breathe.', 'Look away from the screen for a bit.', 'Grab some water.'],
-  long: ['You earned this. Take a real break.', 'Walk around, reset your mind.', 'Rest is part of the work.'],
+  rest: ['You earned this. Take a real break.', 'Walk around, reset your mind.', 'Rest is part of the work.'],
 };
 
 const progress = $('progress');
@@ -85,7 +81,7 @@ function render() {
   b.dataset.phase = custom ? 'custom' : state.phase;
   if (custom) applyCustomColors(custom);
   for (const s of ['idle', 'running', 'paused']) b.classList.toggle(s, state.status === s);
-  setCharged(isWork(state.phase) && state.status === 'running');
+  setCharged(isWork(state.phase, settings) && state.status === 'running');
 
   renderTabs();
   const idx = tabOrder().indexOf(state.phase);
@@ -97,7 +93,7 @@ function render() {
   // presets (shown when idle)
   const presets = $('presets');
   presets.replaceChildren(
-    ...(state.status === 'idle' ? PRESETS[state.phase] || PRESETS.focus : []).map((m) => {
+    ...(state.status === 'idle' ? PRESETS[isWork(state.phase, settings) ? 'work' : 'break'] : []).map((m) => {
       const btn = document.createElement('button');
       btn.textContent = `${m} min`;
       if (phaseMinutes(state.phase, settings) === m) btn.className = 'on';
@@ -107,20 +103,12 @@ function render() {
   );
 
   // mantra stays stable per phase within a popup open
-  const list = MANTRAS[state.phase] || [`All in on ${custom?.name}.`, 'One task, full attention.', 'Small steps, steady progress.'];
+  const list = MANTRAS[state.phase] || (custom?.kind === 'break' ? MANTRAS.rest : [`All in on ${custom?.name}.`, 'One task, full attention.', 'Small steps, steady progress.']);
   $('mantra').textContent = list[(new Date().getHours() + idx) % list.length];
   $('mantra').hidden = state.status === 'idle';
   presets.hidden = state.status !== 'idle';
 
-  // cycle dots (only meaningful when a long break tab exists)
-  $('dots').hidden = !breakEnabled('long', settings);
-  $('dots').replaceChildren(
-    ...Array.from({ length: settings.longEvery }, (_, i) => {
-      const d = document.createElement('i');
-      if (i < state.cycle) d.className = 'on';
-      return d;
-    })
-  );
+  $('dots').hidden = true;
 
   // today + week
   const today = stats[todayKey()] || { sessions: 0, minutes: 0 };
@@ -165,7 +153,7 @@ function streak() {
   return count;
 }
 
-// ---------- tabs: Focus, your custom tabs, Short break, Long break ----------
+// ---------- tabs: Focus, Break, then your custom tabs ----------
 function hexToRgba(hex, a) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
@@ -208,29 +196,18 @@ function renderTabs() {
       btn.append(del);
     } else {
       btn.textContent = PHASES[phase].label;
-      if (phase !== 'focus') {
-        const del = document.createElement('span');
-        del.className = 'del';
-        del.textContent = '×';
-        del.title = `Remove ${PHASES[phase].label}`;
-        del.addEventListener('click', (e) => {
-          e.stopPropagation();
-          setBreak(phase, false);
-        });
-        btn.append(del);
-      }
     }
     btn.addEventListener('click', () => send('setPhase', { phase }));
     return btn;
   });
-  seg.replaceChildren(pill, ...buttons, ...quickAddChips());
+  seg.replaceChildren(pill, ...buttons);
 
   const addBtn = $('addBtn');
   addBtn.disabled = customs.length >= MAX_CUSTOM;
   addBtn.title = addBtn.disabled ? `Up to ${MAX_CUSTOM} custom tabs` : 'New tab (N)';
 
   if (justAdded) {
-    const added = buttons.find((x) => x.dataset.phase === justAdded || x.textContent.startsWith(justAdded));
+    const added = buttons.find((x) => x.dataset.phase === justAdded);
     if (added) {
       added.classList.add('pop');
       if (!sel0(added)) added.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -257,57 +234,57 @@ $('seg').addEventListener('scroll', (e) => {
   seg.classList.toggle('at-end', seg.scrollLeft + seg.clientWidth >= seg.scrollWidth - 2);
 });
 
-// Dashed placeholder chips: one click adds a ready-made tab.
-function quickAddChips() {
-  const names = new Set((settings.custom || []).map((c) => c.name.toLowerCase()));
-  const full = (settings.custom || []).length >= MAX_CUSTOM;
-  return SUGGESTIONS.filter((sg) =>
-    sg.break ? !breakEnabled(sg.key, settings) : !full && !names.has(sg.name.toLowerCase())
-  ).map((sg) => {
-    const chip = document.createElement('button');
-    chip.className = 'ghost-tab';
-    chip.title = sg.break ? `Add a ${sg.name.toLowerCase()} tab` : `Add "${sg.name}" (${sg.minutes} min)`;
-    chip.innerHTML = '<b>+</b>';
-    chip.append(sg.name);
-    chip.addEventListener('click', async () => {
-      justAdded = sg.break ? sg.key : sg.name;
-      if (sg.break) await setBreak(sg.key, true);
-      else await createCustom(sg.name, sg.minutes);
-    });
-    return chip;
-  });
-}
-
 let justAdded = null;
+let addKind = 'work';
 
-async function setBreak(key, on) {
-  const breaks = { ...(settings.breaks || {}), [key]: on };
-  await chrome.storage.local.set({ settings: { ...settings, breaks } });
-}
-
-function openAddTab() {
+function openAddTab(kind) {
   if ((settings.custom || []).length >= MAX_CUSTOM || $('timerView').hidden) return;
-  $('tabsRow').hidden = true;
-  $('addTab').hidden = false;
+  setAddKind(kind || 'work');
   $('addName').value = '';
-  $('addMin').value = 25;
+  $('addTab').hidden = false;
+  $('addBtn').classList.add('open');
   $('addName').focus();
 }
 
 function closeAddTab() {
   if ($('addTab').hidden) return;
   $('addTab').hidden = true;
-  $('tabsRow').hidden = false;
-  renderTabs();
+  $('addBtn').classList.remove('open');
 }
 
-async function createCustom(name, minutes) {
+function setAddKind(kind) {
+  addKind = kind;
+  $('addTab').dataset.kind = kind;
+  document.querySelectorAll('.cat button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+  $('addName').placeholder = kind === 'work' ? 'Name, e.g. PR Review' : 'Name, e.g. Coffee';
+  $('addMin').value = kind === 'work' ? 25 : 10;
+  const taken = new Set((settings.custom || []).map((c) => c.name.toLowerCase()));
+  $('ideas').replaceChildren(
+    ...IDEAS[kind]
+      .filter(([name]) => !taken.has(name.toLowerCase()))
+      .map(([name, mins]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = `<span></span><small>${mins}m</small>`;
+        b.firstChild.textContent = name;
+        b.title = `Add "${name}" (${mins} min)`;
+        b.addEventListener('click', () => {
+          closeAddTab();
+          createCustom(name, mins, kind);
+        });
+        return b;
+      })
+  );
+}
+
+async function createCustom(name, minutes, kind = 'work') {
   const customs = [...(settings.custom || [])];
   const used = new Set(customs.map((c) => c.color));
-  let color = 0;
-  while (used.has(color) && color < CUSTOM_COLORS.length) color++;
-  const tab = { id: `c_${Date.now().toString(36)}`, name, minutes, color: color % CUSTOM_COLORS.length };
+  const pool = COLOR_SETS[kind];
+  const color = pool.find((i) => !used.has(i)) ?? pool[customs.length % pool.length];
+  const tab = { id: `c_${Date.now().toString(36)}`, name, minutes, color, kind };
   customs.push(tab);
+  justAdded = tab.id;
   await chrome.storage.local.set({ settings: { ...settings, custom: customs } });
   await send('setPhase', { phase: tab.id });
 }
@@ -317,10 +294,18 @@ async function deleteCustom(id) {
   await chrome.storage.local.set({ settings: { ...settings, custom: customs } });
 }
 
-$('addBtn').addEventListener('click', openAddTab);
+$('addBtn').addEventListener('click', () => ($('addTab').hidden ? openAddTab() : closeAddTab()));
+document.querySelectorAll('.cat button').forEach((b) => b.addEventListener('click', () => {
+  setAddKind(b.dataset.kind);
+  $('addName').focus();
+}));
+document.addEventListener('pointerdown', (e) => {
+  if (!$('addTab').hidden && !e.target.closest('#addTab, #addBtn')) closeAddTab();
+});
 $('addCancel').addEventListener('click', closeAddTab);
 $('addTab').addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { e.preventDefault(); closeAddTab(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAddTab(); }
+  else if (e.key === 'Tab' && e.shiftKey && e.target === $('addName')) { e.preventDefault(); setAddKind(addKind === 'work' ? 'break' : 'work'); }
 });
 $('addTab').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -328,7 +313,7 @@ $('addTab').addEventListener('submit', async (e) => {
   const minutes = Math.min(180, Math.max(1, Math.round(Number($('addMin').value) || 25)));
   if (!name) return $('addName').focus();
   closeAddTab();
-  await createCustom(name, minutes);
+  await createCustom(name, minutes, addKind);
 });
 
 // ---------- charged focus: a bold lightning bolt strikes across the dial ----------
@@ -448,6 +433,7 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'r') send('reset');
   else if (k === 's') send('skip');
   else if (k === 'n') { e.preventDefault(); openAddTab(); }
+  else if (k === 'b') { e.preventDefault(); openAddTab('break'); }
   else if (k === 'arrowleft' || k === 'arrowright') {
     e.preventDefault();
     const order = tabOrder();
@@ -465,7 +451,7 @@ function renderCustomRows() {
   if (!customs.length) {
     const p = document.createElement('div');
     p.className = 'empty';
-    p.textContent = 'No custom tabs yet. Use the + next to the tabs to add one, like "PR Review".';
+    p.textContent = 'No custom tabs yet. Use + next to the tabs to add a Focus tab like "PR Review" or a Break like "Coffee".';
     return g.replaceChildren(p);
   }
   g.replaceChildren(
@@ -473,7 +459,7 @@ function renderCustomRows() {
       const row = document.createElement('div');
       row.className = 'crow';
       row.dataset.id = c.id;
-      row.innerHTML = `<i class="swatch"></i><input class="cname" maxlength="18" aria-label="Tab name" />
+      row.innerHTML = `<i class="swatch"></i><span class="kind" title="${c.kind === 'break' ? 'Break' : 'Focus'}">${c.kind === 'break' ? '☕' : '⚡'}</span><input class="cname" maxlength="18" aria-label="Tab name" />
         <span class="num"><button type="button" data-step="-1">−</button><input type="number" class="cmin" min="1" max="180" aria-label="Minutes" /><button type="button" data-step="1">+</button></span>
         <button type="button" class="remove" title="Delete tab" aria-label="Delete tab">×</button>`;
       row.querySelector('.swatch').style.background = CUSTOM_COLORS[c.color % CUSTOM_COLORS.length].a1;

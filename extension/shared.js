@@ -1,71 +1,70 @@
 // Shared constants and helpers used by the service worker and the popup.
 
+// Two built-in tabs. Everything else is a custom tab in one of two categories.
 export const PHASES = {
   focus: { label: 'Focus', color: '#ff5c66' },
-  short: { label: 'Short break', color: '#23cdaa' },
-  long: { label: 'Long break', color: '#8c78ff' },
+  short: { label: 'Break', color: '#23cdaa' },
 };
 
-// Colour pairs for custom tabs, picked in order as tabs are created.
-export const CUSTOM_COLORS = [
-  { a1: '#ffb547', a2: '#ff7a2f' }, // amber
-  { a1: '#ff7ad9', a2: '#b46bff' }, // pink
-  { a1: '#4dd7ff', a2: '#3d7bff' }, // sky
-  { a1: '#b7f34d', a2: '#2fcf7d' }, // lime
-  { a1: '#ffd84d', a2: '#ff9f1c' }, // gold
-  { a1: '#ff8a8a', a2: '#e0477a' }, // rose
-];
+export const CATEGORIES = {
+  work: { label: 'Focus', icon: '⚡' },
+  break: { label: 'Break', icon: '☕' },
+};
 
-export const MAX_CUSTOM = 6;
+// Colour pairs for custom tabs: warm/bright for focus, cool/calm for breaks.
+export const CUSTOM_COLORS = [
+  { a1: '#ffb547', a2: '#ff7a2f' }, // 0 amber   (focus)
+  { a1: '#ff7ad9', a2: '#b46bff' }, // 1 pink    (focus)
+  { a1: '#4dd7ff', a2: '#3d7bff' }, // 2 sky     (focus)
+  { a1: '#ffd84d', a2: '#ff9f1c' }, // 3 gold    (focus)
+  { a1: '#ff8a8a', a2: '#e0477a' }, // 4 rose    (focus)
+  { a1: '#8c9cff', a2: '#a66bff' }, // 5 violet  (break)
+  { a1: '#b7f34d', a2: '#2fcf7d' }, // 6 lime    (break)
+  { a1: '#6fe7d9', a2: '#2aa7c9' }, // 7 teal    (break)
+  { a1: '#a3b8ff', a2: '#6c8cff' }, // 8 periwinkle (break)
+];
+export const COLOR_SETS = { work: [0, 1, 2, 3, 4], break: [5, 6, 7, 8] };
+
+// Name ideas shown in the + menu for each category.
+export const IDEAS = {
+  work: [['PR Review', 30], ['Deep work', 50], ['Emails', 15], ['Study', 45], ['Meeting prep', 20], ['Writing', 40]],
+  break: [['Long break', 15], ['Coffee', 10], ['Walk', 15], ['Stretch', 3], ['Lunch', 45], ['Power nap', 20]],
+};
+
+export const MAX_CUSTOM = 8;
 
 export const DEFAULT_SETTINGS = {
   focus: 25,
   short: 5,
-  long: 15,
-  longEvery: 4,
   autoStartBreaks: false,
   autoStartFocus: false,
   sound: true,
   dailyGoal: 8,
-  custom: [], // [{ id, name, minutes, color }]
-  breaks: { short: false, long: false }, // break tabs are opt-in via quick add
+  custom: [], // [{ id, name, minutes, color, kind: 'work' | 'break' }]
 };
 
 export const DEFAULT_STATE = {
-  phase: 'focus', // 'focus' | 'short' | 'long' | a custom tab id
-  lastWork: 'focus', // the work tab to return to after a break
+  phase: 'focus', // 'focus' | 'short' | a custom tab id
+  lastWork: 'focus', // focus tab to return to after a break
+  lastBreak: 'short', // break tab to go to after a focus session
   status: 'idle', // idle | running | paused
   endTime: null, // epoch ms while running
   remainingMs: null, // ms left while paused / idle
-  cycle: 0, // completed work sessions in the current long-break cycle
 };
 
 export function findCustom(phase, settings) {
   return (settings.custom || []).find((c) => c.id === phase) || null;
 }
 
-export function breakEnabled(phase, settings) {
-  return Boolean(settings.breaks?.[phase]);
-}
-
 export function phaseExists(phase, settings) {
-  if (phase === 'focus') return true;
-  if (phase === 'short' || phase === 'long') return breakEnabled(phase, settings);
-  return Boolean(findCustom(phase, settings));
+  return Boolean(PHASES[phase] || findCustom(phase, settings));
 }
 
-// Ready-made tabs offered as dashed "quick add" chips until the user adds them.
-export const SUGGESTIONS = [
-  { key: 'short', name: 'Short break', break: true },
-  { key: 'long', name: 'Long break', break: true },
-  { key: 'pr', name: 'PR Review', minutes: 30 },
-  { key: 'email', name: 'Emails', minutes: 15 },
-  { key: 'deep', name: 'Deep work', minutes: 50 },
-];
-
-// Focus and every custom tab are "work" sessions; short and long are breaks.
-export function isWork(phase) {
-  return phase !== 'short' && phase !== 'long';
+// Focus and focus-category tabs are "work"; Break and break-category tabs are breaks.
+export function isWork(phase, settings) {
+  if (phase === 'focus') return true;
+  if (phase === 'short') return false;
+  return findCustom(phase, settings)?.kind !== 'break';
 }
 
 export function phaseLabel(phase, settings) {

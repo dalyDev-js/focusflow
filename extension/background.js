@@ -1,6 +1,6 @@
 import {
   DEFAULT_SETTINGS, DEFAULT_STATE, todayKey, phaseMs, phaseMinutes, phaseLabel, phaseColor,
-  phaseExists, findCustom, isWork, breakEnabled,
+  phaseExists, findCustom, isWork,
 } from './shared.js';
 
 const END_ALARM = 'phase-end';
@@ -90,7 +90,8 @@ async function setPhase(phase) {
   const { state, settings } = await load();
   if (!phaseExists(phase, settings)) return;
   state.phase = phase;
-  if (isWork(phase)) state.lastWork = phase;
+  if (isWork(phase, settings)) state.lastWork = phase;
+  else state.lastBreak = phase;
   state.status = 'idle';
   state.endTime = null;
   state.remainingMs = null;
@@ -130,7 +131,7 @@ async function advance(completed) {
   if (completed && !(state.status === 'running' && state.endTime <= Date.now() + 1000)) return;
   const finished = state.phase;
 
-  if (isWork(finished)) {
+  if (isWork(finished, settings)) {
     if (completed) {
       const key = todayKey();
       const day = stats[key] || { sessions: 0, minutes: 0 };
@@ -144,17 +145,8 @@ async function advance(completed) {
       await chrome.storage.local.set({ stats });
     }
     state.lastWork = finished;
-    state.cycle = (state.cycle || 0) + 1;
-    // Breaks only happen if you added them as tabs; otherwise stay on the same tab.
-    if (breakEnabled('long', settings) && state.cycle >= settings.longEvery) {
-      state.phase = 'long';
-      state.cycle = 0;
-    } else if (breakEnabled('short', settings)) {
-      state.phase = 'short';
-    } else {
-      state.phase = finished;
-      if (!breakEnabled('long', settings)) state.cycle = 0;
-    }
+    // Go to the break tab you used last (e.g. "Coffee"), or the default Break.
+    state.phase = phaseExists(state.lastBreak, settings) ? state.lastBreak : 'short';
   } else {
     // After a break, go back to whatever you were working on (e.g. "PR Review").
     state.phase = phaseExists(state.lastWork, settings) ? state.lastWork : 'focus';
@@ -169,12 +161,11 @@ async function advance(completed) {
 
   if (completed) {
     await notify(finished, state.phase, settings);
-    if (settings.sound) await playChime(isWork(finished) ? 'break' : 'focus');
+    if (settings.sound) await playChime(isWork(finished, settings) ? 'break' : 'focus');
   }
 
   // Never auto-restart the same work tab back to back (no break in between).
-  const sameTab = isWork(finished) && state.phase === finished;
-  const autoStart = !sameTab && (isWork(state.phase) ? settings.autoStartFocus : settings.autoStartBreaks);
+  const autoStart = isWork(state.phase, settings) ? settings.autoStartFocus : settings.autoStartBreaks;
   if (autoStart) await start();
 }
 
@@ -189,20 +180,18 @@ async function notify(finished, next, settings) {
   const nextMins = phaseMinutes(next, settings);
   const work = nextName === 'Focus' ? 'focus session' : `${nextName} session`;
   let m;
-  if (isWork(finished)) {
+  if (isWork(finished, settings)) {
     const name = phaseLabel(finished, settings);
     m = {
       title: `${name === 'Focus' ? 'Focus session' : name} done 🎉`,
-      message: isWork(next)
-        ? `Nice work! Ready for another ${nextMins} minute ${work}?`
-        : next === 'long'
-          ? `Great work! Time for a ${nextMins} minute long break.`
-          : `Nice! Take a ${nextMins} minute break. Stretch, breathe, drink water.`,
+      message:
+        next === 'short'
+          ? `Nice! Take a ${nextMins} minute break. Stretch, breathe, drink water.`
+          : `Nice work! Time for ${nextName} (${nextMins} min).`,
     };
-  } else if (finished === 'short') {
-    m = { title: 'Break is over ☕', message: `Ready for another ${nextMins} minute ${work}?` };
   } else {
-    m = { title: 'Long break is over 🌿', message: `Recharged? Let's start a fresh ${nextMins} minute ${work}.` };
+    const name = phaseLabel(finished, settings);
+    m = { title: `${name === 'Break' ? 'Break' : name} is over ☕`, message: `Recharged? Ready for a ${nextMins} minute ${work}?` };
   }
   await chrome.notifications.clear(NOTIFICATION_ID);
   await chrome.notifications.create(NOTIFICATION_ID, {
@@ -212,7 +201,7 @@ async function notify(finished, next, settings) {
     message: m.message,
     priority: 2,
     requireInteraction: true,
-    buttons: [{ title: isWork(next) ? (next === finished ? 'Go again' : `Start ${nextName}`) : 'Start break' }, { title: 'Dismiss' }],
+    buttons: [{ title: `Start ${nextName}` }, { title: 'Dismiss' }],
   });
 }
 
@@ -283,6 +272,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (!phaseExists(state.phase, settings)) {
       await setPhase(phaseExists(state.lastWork, settings) ? state.lastWork : 'focus');
     }
+    const cur = (await load()).state;
+    if (!phaseExists(cur.lastBreak, settings)) {
+      cur.lastBreak = 'short';
+      await chrome.storage.local.set({ state: cur });
+    }
     else await updateBadge(state, settings);
     if (!phaseExists(state.lastWork, settings)) {
       const fresh = (await load()).state;
@@ -294,6 +288,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const { state, settings } = await load();
+  // Migrate older versions: long-break tabs are gone, unknown tabs fall back to Focus.
+  if (!phaseExists(state.phase, settings)) Object.assign(state, { phase: 'focus', status: 'idle', endTime: null, remainingMs: null });
+  if (!phaseExists(state.lastWork, settings)) state.lastWork = 'focus';
+  if (!phaseExists(state.lastBreak, settings)) state.lastBreak = 'short';
+  delete settings.breaks;
+  delete settings.long;
+  delete settings.longEvery;
   await chrome.storage.local.set({ state, settings });
   await updateBadge(state);
 });
